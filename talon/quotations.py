@@ -274,10 +274,14 @@ def extract_from_html(msg_body):
     if msg_body.strip() == '':
         return msg_body
 
-    html_tree = html.document_fromstring(
-        msg_body,
-        parser=html.HTMLParser(encoding="utf-8")
-    )
+    try:
+        html_tree = html.document_fromstring(
+            msg_body,
+            parser=html.HTMLParser(encoding="utf-8")
+        )
+    except etree.ParserError:
+        # Malformed HTML, don't try to strip.
+        return msg_body
 
     cut_quotations = (html_quotations.cut_gmail_quote(html_tree) or
                       html_quotations.cut_blockquote(html_tree) or
