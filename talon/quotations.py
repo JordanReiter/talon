@@ -349,7 +349,6 @@ def extract_from_html(msg_body, placeholder=None):
     if results:
         # shortest result is best result
         _, html_tree_copy, method = min(results, key=lambda x: x[0])
-        print method
         return html.tostring(html_tree_copy)
 
     # Return original (no cuts made)
