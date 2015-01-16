@@ -6,8 +6,10 @@ messages (without quoted messages) from html
 import regex as re
 import html2text
 from lxml import html, etree
+from copy import deepcopy
 
 
+RE_FWD = re.compile("(([-]+[ ]*Forwarded message[ ]*[-]+)|(Begin forwarded message:))", re.I | re.M)
 CHECKPOINT_PREFIX = '#!%!'
 CHECKPOINT_SUFFIX = '!%!#'
 CHECKPOINT_PATTERN = re.compile(CHECKPOINT_PREFIX + '\d+' + CHECKPOINT_SUFFIX)
@@ -85,22 +87,22 @@ def delete_quotation_tags(html_note, quotation_checkpoints, placeholder=None):
             return html_note, counter, True
         else:
             # Remove quotation children.
+            if insert_placeholder and quotation_children:
+                quotation_children[0].addprevious(placeholder)
             for child in quotation_children:
                 html_note.remove(child)
-            if insert_placeholder and quotation_children:
-                html_note.insert(0, placeholder)
             return html_note, counter, False
 
     recursive_helper(html_note, 0, placeholder != None)
 
 
 def cut_gmail_quote(html_message, placeholder=None):
-    ''' Cuts the outermost block element with class gmail_quote. '''
+    ''' Cuts the last outermost blockquote in the outermost element with class gmail_quote. '''
     gmail_quote = html_message.cssselect('.gmail_quote')
    
     if gmail_quote:
         gmail_quote = gmail_quote[0]
-        if gmail_quote.text and (re.search(r'-* Forwarded message -*', gmail_quote.text)):
+        if gmail_quote.text and (re.search(RE_FWD, gmail_quote.text)):
             return False
 
         blockquotes = gmail_quote.xpath('//blockquote')
@@ -184,9 +186,14 @@ def cut_blockquote(html_message, placeholder=None):
     if blockquotes:
         # get only highest-level blockquotes
         blockquotes = blockquotes[0].getparent().xpath('./blockquote')
-        if len(blockquotes) == 1:
-            if blockquotes[0].text and (re.search(r'-* Forwarded message -*', blockquotes[0].text)):
+        if blockquotes:
+            if blockquotes[0].text and (re.search(RE_FWD, blockquotes[0].text)):
                 return False
+            if blockquotes[0].getprevious() and (re.search(RE_FWD, html.tostring(blockquotes[0].getprevious()))):
+                return False
+            if blockquotes[0].getparent().text and (re.search(RE_FWD, blockquotes[0].getparent().text)):
+                return False
+        if len(blockquotes) == 1:
             if placeholder is not None:
                 blockquotes[0].addprevious(placeholder)
             blockquotes[0].getparent().remove(blockquotes[0])

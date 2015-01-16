@@ -28,7 +28,7 @@ h = html2text.HTML2Text()
 h.body_width = 0
 textify_html = h.handle
 
-RE_FWD = re.compile("[-]+[ ]*Forwarded message[ ]*[-]+", re.I | re.M)
+RE_FWD = re.compile("(([-]+[ ]*Forwarded message[ ]*[-]+)|(Begin forwarded message:))", re.I | re.M)
 
 RE_ON_DATE_SMB_WROTE = re.compile(
     r'''
@@ -81,11 +81,12 @@ RE_EMPTY_QUOTATION = re.compile(
 
 SPLITTER_PATTERNS = [
     # ------Original Message------ or ---- Reply Message ----
-    re.compile("[\s]*[-]+[ ]*(Original|Reply) Message[ ]*[-]+", re.I),
+    re.compile("[\s ]*[-]+[ ]*(Original|Reply) Message[ ]*[-]+", re.I),
     # <date> <person>
     re.compile("(\d+/\d+/\d+|\d+\.\d+\.\d+).*@", re.VERBOSE),
     RE_ON_DATE_SMB_WROTE,
-    re.compile('(_+\r?\n)?[\s]*(:?[*]?From|Date|Subject|To):[*]? .*'),      #TODO: can lead to false positive easily!!
+    RE_ON_DATE_SMB_WROTE_GOOGLE,
+    re.compile('(_+\r?\n)?[\s]*(:?[*]?From|Date|Sent|Subject|To):[*]? .*'),      #TODO: can lead to false positive easily!!
     re.compile('\S{3,10}, \d\d? \S{3,10} 20\d\d,? \d\d?:\d\d(:\d\d)?'
                '( \S+){3,6}@\S+:')
     ]
@@ -199,10 +200,6 @@ def process_marked_lines(lines, markers, return_flags=[False, -1, -1]):
     if 's' not in markers and not re.search('(me*){3}', markers):
         markers = markers.replace('m', 't')
 
-    # a single t amongst many m's is more likely a mistake than an inline reply
-    if re.search(r'(me*){10,}t(me*){10,}', markers):
-        markers = bytearray(re.sub(r'(me*){10,}t(me*){10,}', '\1m\2', str(markers)))
-
     # Look for forwards (don't remove anything on a forward)
 
     # if there is an f before the first split, then it's a forward.
@@ -220,7 +217,7 @@ def process_marked_lines(lines, markers, return_flags=[False, -1, -1]):
     if not quotation:
 
         # match for inline replies
-        if re_orig.match(r'e*(me*)+[mfts]*((te*)+(me*)+)+[mfts]*((se*)+|(me*){2,})', markers):
+        if re_orig.match(r'e*[mfts]*((te*)+(me*)+)+[mfts]*((se*)+|(me*){2,})', markers):
             return_flags[:] = [False, -1, -1]
             return lines 
 
@@ -229,7 +226,7 @@ def process_marked_lines(lines, markers, return_flags=[False, -1, -1]):
 
     if not quotation:
         # match for normal reply with quote and signature below quote
-        if re.match(r'e*(te*)+(me*)+.*(s)+e*(te*){2,}', markers):
+        if re.match(r'e*(te*)+(me*)+.*(s)+e*(te*)+', markers):
             quotation = re.match(r'e*(te*)+(me*)+.*(s)+', markers)
 
     markers.reverse()
@@ -318,14 +315,6 @@ def extract_from_html(msg_body, placeholder=None):
         msg_body: message body to extract from
         placeholder: text which replaces extracted quote
 
-    1) Try to cut out appropriate 'blockquote', 'gmail_quote', and Microsoft quotations.
-    2) If this removes nothing or everything, try the plain text algorithm which works as follows:
-        adding checkpoint text to all html tags,
-        then converting html to text,
-        then extracting quotations from text,
-        then checking deleted checkpoints,
-        then deleting necessary tags.
-    3) If the plaintext algorithm removes nothing or everything, return the original.
     """
 
     if msg_body.strip() == '':
@@ -340,29 +329,26 @@ def extract_from_html(msg_body, placeholder=None):
         # Malformed HTML, don't try to strip.
         return msg_body
 
-    # Try using HTML methods
-    html_tree_copy = deepcopy(html_tree) # copy to allow reverting mutations
+    methods = [
+        html_quotations.cut_gmail_quote,
+        html_quotations.cut_blockquote,
+        html_quotations.cut_microsoft_quote,
+        html_quotations.cut_by_id,
+        extract_from_html_by_plaintext
+    ]
 
-    cut_quotations = (html_quotations.cut_gmail_quote(html_tree, placeholder) or
-                      html_quotations.cut_blockquote(html_tree, placeholder) or
-                      html_quotations.cut_microsoft_quote(html_tree, placeholder) or
-                      html_quotations.cut_by_id(html_tree, placeholder)
-                      )
-    if cut_quotations:
-        # only accept html cut solution if non-empty
-        if textify_html(html.tostring(html_tree)).strip() != '':
-            return html.tostring(html_tree)
-
-    html_tree = html_tree_copy # retrieve from copy
-
-
-    # Try using plain text method
-    plain_text_extraction = extract_from_html_by_plaintext(html_tree, placeholder)
-    if plain_text_extraction != False:
-        msg = html.tostring(plain_text_extraction)
-        # only accept plain text cut solution if non-empty
-        if textify_html(msg).strip() != '':
-            return msg
+    results = []
+    for method in methods:
+        tree_copy = deepcopy(html_tree)
+        placeholder = deepcopy(placeholder)
+        if method(tree_copy, placeholder):
+            length = len(textify_html(html.tostring(tree_copy)).strip())
+            if length:
+                results.append((length, tree_copy))
+    if results:
+        # shortest result is best result
+        _, html_tree_copy = min(results, key=lambda x: x[0])
+        return html.tostring(html_tree_copy)
 
     # Return original (no cuts made)
     return msg_body
@@ -370,9 +356,9 @@ def extract_from_html(msg_body, placeholder=None):
 def extract_from_html_by_plaintext(html_tree, placeholder):
     html_tree_copy = deepcopy(html_tree)
 
-    number_of_checkpoints = html_quotations.add_checkpoint(html_tree, 0)
+    number_of_checkpoints = html_quotations.add_checkpoint(html_tree_copy, 0)
     quotation_checkpoints = [False for i in xrange(number_of_checkpoints)]
-    msg_with_checkpoints = html.tostring(html_tree)
+    msg_with_checkpoints = html.tostring(html_tree_copy)
 
     # html2text adds unnecessary star symbols. Remove them.
     # Mask star symbols
@@ -407,7 +393,6 @@ def extract_from_html_by_plaintext(html_tree, placeholder):
     return_flags = []
     process_marked_lines(lines, markers, return_flags)
     lines_were_deleted, first_deleted, last_deleted = return_flags
-
     if not lines_were_deleted:
         return False
 
@@ -417,8 +402,8 @@ def extract_from_html_by_plaintext(html_tree, placeholder):
             quotation_checkpoints[checkpoint] = True
 
     # Remove tags with quotation checkpoints
-    html_quotations.delete_quotation_tags(html_tree_copy, quotation_checkpoints, placeholder)
-    return html_tree_copy
+    html_quotations.delete_quotation_tags(html_tree, quotation_checkpoints, placeholder)
+    return True
 
 
 def text_content(context):
