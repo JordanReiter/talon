@@ -20,7 +20,6 @@ from talon.constants import RE_DELIMITER
 from talon.utils import random_token, get_delimiter
 from talon import html_quotations
 
-
 log = logging.getLogger(__name__)
 
 
