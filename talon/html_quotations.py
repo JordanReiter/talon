@@ -104,6 +104,8 @@ def cut_gmail_quote(html_message, placeholder=None):
         gmail_quote = gmail_quote[0]
         if gmail_quote.text and (re.search(RE_FWD, gmail_quote.text)):
             return False
+        if len(gmail_quote) and (re.search(RE_FWD, html.tostring(gmail_quote[0]))):
+            return False
 
         blockquotes = gmail_quote.xpath('//blockquote')
         if blockquotes:
@@ -192,6 +194,8 @@ def cut_blockquote(html_message, placeholder=None):
             if blockquotes[0].getprevious() and (re.search(RE_FWD, html.tostring(blockquotes[0].getprevious()))):
                 return False
             if blockquotes[0].getparent().text and (re.search(RE_FWD, blockquotes[0].getparent().text)):
+                return False
+            if len(blockquotes[0]) and (re.search(RE_FWD, html.tostring(blockquotes[0][0]))):
                 return False
         if len(blockquotes) == 1:
             if placeholder is not None:

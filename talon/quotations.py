@@ -310,6 +310,8 @@ def extract_from_html(msg_body, placeholder=None):
     Extract not quoted message from provided html message body
     using html tag-based and plaintext-based methods.
 
+    Runs all methods and uses the shortest valid solution.
+
     args
         msg_body: message body to extract from
         placeholder: text which replaces extracted quote
@@ -343,10 +345,11 @@ def extract_from_html(msg_body, placeholder=None):
         if method(tree_copy, placeholder):
             length = len(textify_html(html.tostring(tree_copy)).strip())
             if length:
-                results.append((length, tree_copy))
+                results.append((length, tree_copy, method))
     if results:
         # shortest result is best result
-        _, html_tree_copy = min(results, key=lambda x: x[0])
+        _, html_tree_copy, method = min(results, key=lambda x: x[0])
+        print method
         return html.tostring(html_tree_copy)
 
     # Return original (no cuts made)
