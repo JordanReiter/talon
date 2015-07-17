@@ -105,14 +105,25 @@ def test_validate_output_html():
 def test_gmail_quote():
     msg_body = """Reply
 <div class="gmail_quote">
-  <div class="gmail_quote">
+  <blockquote class="gmail_quote">
     On 11-Apr-2011, at 6:54 PM, Bob &lt;bob@example.com&gt; wrote:
     <div>
       Test
     </div>
-  </div>
+  </blockquote>
 </div>"""
     eq_("<html><body><p>Reply</p></body></html>",
+        RE_WHITESPACE.sub('', quotations.extract_from_html(msg_body)))
+
+
+def test_no_gmail_quote_false_positive():
+    msg_body = """
+    <html><body>
+    <div class="gmail_quote">
+      broken_email_client_sent_this
+    </div>
+    </body></html>"""
+    eq_("<html><body><div>broken_email_client_sent_this</div></body></html>",
         RE_WHITESPACE.sub('', quotations.extract_from_html(msg_body)))
 
 

@@ -329,6 +329,14 @@ def extract_from_html(msg_body):
     if msg_body.strip() == '':
         return msg_body
 
+    # Fix bad HTML caused by weird encoding issues
+    if msg_body.count('=3D') > 2:
+        # it's unlikely this was intentional
+        msg_body = msg_body.replace('=3D', '=')
+        # also get rid of trailing equals; in doing so, strip newlines
+        # as there may have been spurious ones inserted in the middle of tags
+        msg_body = msg_body.replace('=\n', '')
+
     try:
         html_tree = html.document_fromstring(
             msg_body,

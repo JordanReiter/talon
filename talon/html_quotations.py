@@ -75,17 +75,26 @@ def delete_quotation_tags(html_note, counter, quotation_checkpoints):
 
 
 def cut_gmail_quote(html_message):
-    ''' Cuts the outermost block element with class gmail_quote. '''
-    gmail_quote = html_message.cssselect('blockquote.gmail_quote')
-    if gmail_quote:
-        # if parent is a <div class="gmail_quote"> remove that too
-        quote = gmail_quote[0]
-        p = quote.getparent()
-        if p.tag == 'div' and p.attrib.get('class') == 'gmail_quote':
-            quote = p
-            p = p.getparent()
-        p.remove(quote)
-        return True
+    ''' Remove div-blockquote combos with class gmail_quote, but don't false-
+        positive divs without blockquote children.
+    '''
+    cut = False
+    gmail_quote = html_message.cssselect('div.gmail_quote')
+    for quote in gmail_quote:
+        if quote.find('.//blockquote') is not None:
+            quote.getparent().remove(quote)
+            cut = True
+    # Remove the gmail_quote class from anything left behind
+    gmail_div = html_message.cssselect('div.gmail_quote')
+    for d in gmail_div:
+        if len(d.getchildren()) == 0 and d.text == '':
+            # Delete empty divs
+            d.getparent().remove(d)
+        else:
+            # If non-empty, remove the gmail_quote class
+            del d.attrib['class']
+        cut = True  # because we need to regenerate the HTML
+    return cut
 
 
 def cut_microsoft_quote(html_message):
