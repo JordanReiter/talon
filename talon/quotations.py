@@ -23,14 +23,49 @@ log = logging.getLogger(__name__)
 RE_FWD = re.compile("^[-]+[ ]*Forwarded message[ ]*[-]+$", re.I | re.M)
 
 RE_ON_DATE_SMB_WROTE = re.compile(
-    r'''
-    (
-        -*  # could include dashes
-        [ ]?On[ ].*,  # date part ends with comma
-        (.*\n){0,2}  # splitter takes 4 lines at most
-        .*(wrote|sent):
+    u'(-*[ ]?({0})[ ].*({1})(.*\n){{0,2}}.*({2}):?-*)'.format(
+        # Beginning of the line
+        u'|'.join((
+            # English
+            'On',
+            # French
+            'Le',
+            # Polish
+            'W dniu',
+            # Dutch
+            'Op'
+        )),
+        # Date and sender separator
+        u'|'.join((
+            # most languages separate date and sender address by comma
+            ',',
+            # polish date and sender address separator
+            u'użytkownik'
+        )),
+        # Ending of the line
+        u'|'.join((
+            # English
+            'wrote', 'sent',
+            # French
+            u'a écrit',
+            # Polish
+            u'napisał',
+            # Dutch
+            'schreef','verzond','geschreven'
+        ))
+    ))
+# Special case for languages where text is translated like this: 'on {date} wrote {somebody}:'
+RE_ON_DATE_WROTE_SMB = re.compile(
+    u'(-*[ ]?({0})[ ].*(.*\n){{0,2}}.*({1})[ ].*:)'.format(
+        # Beginning of the line
+        	'Op',
+        # Ending of the line
+        u'|'.join((
+            # Dutch
+            'schreef','verzond','geschreven'
+        ))
     )
-    ''', re.VERBOSE)
+    )
 
 RE_QUOTATION = re.compile(
     r'''
@@ -66,13 +101,33 @@ RE_EMPTY_QUOTATION = re.compile(
     e*
     ''', re.VERBOSE)
 
+# ------Original Message------ or ---- Reply Message ----
+# With variations in other languages.
+RE_ORIGINAL_MESSAGE = re.compile(u'[\s]*[-]+[ ]*({})[ ]*[-]+'.format(
+    u'|'.join((
+        # English
+        'Original Message', 'Reply Message',
+        # German
+        u'Ursprüngliche Nachricht', 'Antwort Nachricht',
+        # Danish
+        'Oprindelig meddelelse',
+    ))), re.I)
+
+RE_FROM_COLON_OR_DATE_COLON = re.compile(u'(_+\r?\n)?[\s]*(:?[*]?{})[\s]?:[*]? .*'.format(
+    u'|'.join((
+        # "From" in different languages.
+        'From', 'Van', 'De', 'Von', 'Fra',
+        # "Date" in different languages.
+        'Date', 'Datum', u'Envoyé'
+    ))), re.I)
+
 SPLITTER_PATTERNS = [
-    # ------Original Message------ or ---- Reply Message ----
-    re.compile("[\s]*[-]+[ ]*(Original|Reply) Message[ ]*[-]+", re.I),
+    RE_ORIGINAL_MESSAGE,
     # <date> <person>
     re.compile("(\d+/\d+/\d+|\d+\.\d+\.\d+).*@", re.VERBOSE),
     RE_ON_DATE_SMB_WROTE,
-    re.compile('(_+\r?\n)?[\s]*(:?[*]?From|Date):[*]? .*'),
+    RE_ON_DATE_WROTE_SMB,
+    RE_FROM_COLON_OR_DATE_COLON,
     re.compile('\S{3,10}, \d\d? \S{3,10} 20\d\d,? \d\d?:\d\d(:\d\d)?'
                '( \S+){3,6}@\S+:')
     ]

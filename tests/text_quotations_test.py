@@ -33,6 +33,16 @@ On 11-Apr-2011, at 6:54 PM, Roman Tkachenko <romant@example.com> wrote:
     eq_("Test reply", quotations.extract_from_plain(msg_body))
 
 
+def test_pattern_on_date_wrote_somebody():
+    eq_('Lorem', quotations.extract_from_plain(
+    """Lorem
+
+Op 13-02-2014 3:18 schreef Julius Caesar <pantheon@rome.com>:
+    
+Veniam laborum mlkshk kale chips authentic. Normcore mumblecore laboris, fanny pack readymade eu blog chia pop-up freegan enim master cleanse.
+"""))
+
+
 def test_pattern_on_date_somebody_wrote_date_with_slashes():
     msg_body = """Test reply
 
@@ -98,22 +108,24 @@ bla-bla - bla"""
     eq_(reply, quotations.extract_from_plain(msg_body))
 
 
-def test_pattern_original_message():
-    msg_body = """Test reply
+def _check_pattern_original_message(original_message_indicator):
+    msg_body = u"""Test reply
 
------Original Message-----
-
-Test"""
-
-    eq_("Test reply", quotations.extract_from_plain(msg_body))
-
-    msg_body = """Test reply
-
- -----Original Message-----
+-----{}-----
 
 Test"""
+    eq_('Test reply', quotations.extract_from_plain(msg_body.format(unicode(original_message_indicator))))
 
-    eq_("Test reply", quotations.extract_from_plain(msg_body))
+def test_english_original_message():
+    _check_pattern_original_message('Original Message')
+    _check_pattern_original_message('Reply Message')
+
+def test_german_original_message():
+    _check_pattern_original_message(u'Ursprüngliche Nachricht')
+    _check_pattern_original_message('Antwort Nachricht')
+
+def test_danish_original_message():
+    _check_pattern_original_message('Oprindelig meddelelse')
 
 
 def test_reply_after_quotations():
@@ -199,6 +211,33 @@ On 04/19/2011 07:10 AM, Roman Tkachenko wrote:
 > Hello"""
     eq_("Hi", quotations.extract_from_plain(msg_body))
 
+def test_with_indent():
+    msg_body = """YOLO salvia cillum kogi typewriter mumblecore cardigan skateboard Austin.
+
+------On 12/29/1987 17:32 PM, Julius Caesar wrote-----
+
+Brunch mumblecore pug Marfa tofu, irure taxidermy hoodie readymade pariatur. 
+    """
+    eq_("YOLO salvia cillum kogi typewriter mumblecore cardigan skateboard Austin.", quotations.extract_from_plain(msg_body))
+
+
+def test_short_quotation_with_newline():
+    msg_body = """Btw blah blah...
+
+On Tue, Jan 27, 2015 at 12:42 PM -0800, "Company" <christine.XXX@XXX.com> wrote:
+
+Hi Mark,
+Blah blah? 
+Thanks,Christine 
+
+On Jan 27, 2015, at 11:55 AM, Mark XXX <mark@XXX.com> wrote:
+
+Lorem ipsum?
+Mark
+
+Sent from Acompli"""
+    eq_("Btw blah blah...", quotations.extract_from_plain(msg_body))
+
 
 def test_pattern_date_email_with_unicode():
     msg_body = """Replying ok
@@ -208,8 +247,8 @@ def test_pattern_date_email_with_unicode():
     eq_("Replying ok", quotations.extract_from_plain(msg_body))
 
 
-def test_pattern_from_block():
-    msg_body = """Allo! Follow up MIME!
+def test_english_from_block():
+    eq_('Allo! Follow up MIME!', quotations.extract_from_plain("""Allo! Follow up MIME!
 
 From: somebody@example.com
 Sent: March-19-11 5:42 PM
@@ -217,8 +256,70 @@ To: Somebody
 Subject: The manager has commented on your Loop
 
 Blah-blah-blah
-"""
-    eq_("Allo! Follow up MIME!", quotations.extract_from_plain(msg_body))
+"""))
+
+def test_german_from_block():
+    eq_('Allo! Follow up MIME!', quotations.extract_from_plain(
+    """Allo! Follow up MIME!
+
+Von: somebody@example.com
+Gesendet: Dienstag, 25. November 2014 14:59
+An: Somebody
+Betreff: The manager has commented on your Loop
+
+Blah-blah-blah
+"""))
+
+def test_french_multiline_from_block():
+    eq_('Lorem ipsum', quotations.extract_from_plain(
+    u"""Lorem ipsum
+
+De : Brendan xxx [mailto:brendan.xxx@xxx.com]
+Envoyé : vendredi 23 janvier 2015 16:39
+À : Camille XXX
+Objet : Follow Up
+
+Blah-blah-blah
+"""))
+
+def test_french_from_block():
+    eq_('Lorem ipsum', quotations.extract_from_plain(
+    u"""Lorem ipsum
+
+Le 23 janv. 2015 à 22:03, Brendan xxx <brendan.xxx@xxx.com<mailto:brendan.xxx@xxx.com>> a écrit:
+
+Bonjour!"""))
+
+def test_polish_from_block():
+    eq_('Lorem ipsum', quotations.extract_from_plain(
+    u"""Lorem ipsum
+
+W dniu 28 stycznia 2015 01:53 użytkownik Zoe xxx <zoe.xxx@xxx.com>
+napisał:
+
+Blah!
+"""))
+
+def test_danish_from_block():
+    eq_('Allo! Follow up MIME!', quotations.extract_from_plain(
+    """Allo! Follow up MIME!
+
+Fra: somebody@example.com
+Sendt: 19. march 2011 12:10
+Til: Somebody
+Emne: The manager has commented on your Loop
+
+Blah-blah-blah
+"""))
+
+def test_dutch_from_block():
+    eq_('Gluten-free culpa lo-fi et nesciunt nostrud.', quotations.extract_from_plain(
+    """Gluten-free culpa lo-fi et nesciunt nostrud. 
+
+Op 17-feb.-2015, om 13:18 heeft Julius Caesar <pantheon@rome.com> het volgende geschreven:
+    
+Small batch beard laboris tempor, non listicle hella Tumblr heirloom. 
+"""))
 
 
 def test_quotation_marker_false_positive():
